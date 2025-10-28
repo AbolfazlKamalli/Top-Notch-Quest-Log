@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Top Notch Quest Log</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Comic Neue (a great web-friendly version of Comic Sans) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- ADDED: Canvas Confetti library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Firebase JS SDK -->
+    <script type="module">
+      // REMOVED: All Firebase imports
+
+      // --- Configuration ---
+      // UPDATED: Using two localStorage keys
+      const LOCAL_STORAGE_KEY_STRUCTURE = "topNotchStructure";
+      const LOCAL_STORAGE_KEY_PROGRESS = "topNotchProgress";
+
+      // --- Application State ---
+      let appData = []; // Holds the structure (Units, Lessons, Items)
+      let progressData = {}; // Holds the state (checked/unchecked)
+      let initialDataLoaded = false;
+
+      // REMOVED: Firebase-related state
+      // let authReady = false;
+
+      // --- Styles for dynamically added elements ---
+      const STYLES = {
+        checkbox: "h-5 w-5 accent-green-600 rounded-full focus:ring-green-500",
+        listItem:
+          "flex items-center space-x-3 p-2 rounded-md hover:bg-green-100 transition-all",
+        listItemChecked: "text-gray-400 line-through",
+      };
+
+      // --- ADDED: Confetti trigger function ---
+      function triggerConfetti(options = {}) {
+        // Use the global 'confetti' function from the library
+        if (typeof confetti === "function") {
+          const defaults = {
+            particleCount: 150,
+            spread: 90,
+            origin: { y: 0.6 },
+            zIndex: 10000, // Ensure it's on top
+          };
+          confetti({ ...defaults, ...options });
+        }
+      }
+
+      // --- Main App Initialization ---
+      document.addEventListener("DOMContentLoaded", () => {
+        // Check if user name exists
+        let userName = localStorage.getItem("userName");
+        if (!userName) {
+          showNameModal();
+        } else {
+          // Display welcome message
+          document.getElementById(
+            "welcome-message"
+          ).textContent = `Welcome, ${userName}!`;
+
+          // REMOVED: Firebase init block
+
+          // ADDED: Directly initialize app logic
+          initializeAppLogic();
+        }
+      });
+
+      // --- Show Name Modal ---
+      function showNameModal() {
+        const modal = document.getElementById("name-modal");
+        const nameInput = document.getElementById("name-input");
+        const saveBtn = document.getElementById("save-name-btn");
+
+        modal.classList.remove("hidden");
+        nameInput.focus();
+
+        const saveName = () => {
+          const userName = nameInput.value.trim();
+          if (userName) {
+            localStorage.setItem("userName", userName);
+            document.getElementById(
+              "welcome-message"
+            ).textContent = `Welcome, ${userName}!`;
+            modal.classList.add("hidden");
+            initializeAppLogic();
+          } else {
+            nameInput.classList.add("border-red-500");
+            setTimeout(() => nameInput.classList.remove("border-red-500"), 500);
+          }
+        };
+
+        saveBtn.addEventListener("click", saveName);
+        nameInput.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            saveName();
+          }
+        });
+      }
+
+      // --- Authentication ---
+      // REMOVED: setupAuthListener function
+
+      // --- App Logic (Post-Auth) ---
+      async function initializeAppLogic() {
+        // REMOVED: Firestore setup
+
+        // ADDED: Load structure and progress
+        loadAppData();
+        loadProgressFromLocal(); // This now just loads data, doesn't update UI yet
+
+        // ADDED: Initial Render
+        renderApp();
+
+        // ADDED: Update UI after render
+        updateUIFromProgress();
+
+        // ADDED: Attach global event listener for dynamic content
+        attachGlobalListener();
+
+        // Show main content immediately (no loading screen)
+        document.getElementById("main-content").classList.remove("hidden");
+      }
+
+      // --- Data Handling (localStorage) ---
+
+      function getDefaultData() {
+        // Generates unique IDs for items
+        const uid = () => `item-${crypto.randomUUID()}`;
+
+        const createSection = (items) =>
+          items.map((label) => ({ id: uid(), label }));
+
+        // Standard sections for all lessons
+        const createStandardSections = () => ({
+          vocab: {
+            title: "Vocabulary",
+            items: createSection([
+              "Preview new words",
+              "Check English-English meaning",
+              "Find words in context",
+              "Learn collocations (word partners)",
+              "Produce: Write personal sentences",
+              "Add to Flashcard app (Anki/Quizlet)",
+            ]),
+          },
+          grammar: {
+            title: "Grammar",
+            items: createSection([
+              "Study the grammar rule (Form & Function)",
+              "Pattern Hunt: Find the grammar in texts",
+              "Do controlled practice (book exercises)",
+              "Produce: Write/Say 3-5 original sentences",
+            ]),
+          },
+          listening: {
+            title: "Listening",
+            items: createSection([
+              "Listen for Gist (No Text)",
+              "Listen for Details (Answer Questions)",
+              "Listen & Read (Follow Transcript)",
+              "Shadowing: Echoing (Pause & Repeat)",
+              "Shadowing: Full (Speak with Audio)",
+            ]),
+          },
+          reading: {
+            title: "Reading",
+            items: createSection([
+              "Predict: Check title and images",
+              "Skim: Read quickly for main ideas",
+              "Scan/Intensive: Read for details (find answers)",
+              "Analyze text (highlight new grammar/vocab)",
+              "Summarize: Explain the text in 2-3 sentences",
+            ]),
+          },
+          speaking: {
+            title: "Speaking",
+            items: createSection([
+              "Repeat & Master: Read key dialogs aloud",
+              "Do Pair Work (play both roles if solo)",
+              "Personalize: Adapt dialogs with your info",
+              "Record: Answer a discussion question (1-2 min)",
+              "Analyze: Listen to your recording and improve",
+            ]),
+          },
+          writing: {
+            title: "Writing",
+            items: createSection([
+              "Analyze the model text structure",
+              "Complete the writing task",
+              "Targeted Use: Use 3 new words and 1 new grammar rule",
+              "Edit & Proofread (check spelling, grammar)",
+            ]),
+          },
+        });
+
+        return [
+          // Unit 1: Getting Acquainted
+          {
+            id: `unit-${crypto.randomUUID()}`,
+            title: "Unit 1: Getting Acquainted",
+            open: true,
+            lessons: [
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 1: Get reacquainted with someone",
+                open: true,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 2: Greet a visitor to your country",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 3: Discuss gestures and customs",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 4: Describe an interesting experience",
+                open: false,
+                sections: createStandardSections(),
+              },
+            ],
+          },
+          // Unit 2: Going to the Movies
+          {
+            id: `unit-${crypto.randomUUID()}`,
+            title: "Unit 2: Going to the Movies",
+            open: false,
+            lessons: [
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 1: Apologize for being late",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 2: Discuss preferences for movie genres",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 3: Describe and recommend movies",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 4: Discuss effects of movie violence on viewers",
+                open: false,
+                sections: createStandardSections(),
+              },
+            ],
+          },
+          // Unit 3: Staying in Hotels
+          {
+            id: `unit-${crypto.randomUUID()}`,
+            title: "Unit 3: Staying in Hotels",
+            open: false,
+            lessons: [
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 1: Leave and take a message",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 2: Check into a hotel",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 3: Request housekeeping services",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 4: Choose a hotel",
+                open: false,
+                sections: createStandardSections(),
+              },
+            ],
+          },
+          // Unit 4: Cars and Driving
+          {
+            id: `unit-${crypto.randomUUID()}`,
+            title: "Unit 4: Cars and Driving",
+            open: false,
+            lessons: [
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 1: Discuss a car accident",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 2: Describe a car problem",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 3: Rent a car",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 4: Discuss good and bad driving",
+                open: false,
+                sections: createStandardSections(),
+              },
+            ],
+          },
+          // Unit 5: Personal Care and Appearance
+          {
+            id: `unit-${crypto.randomUUID()}`,
+            title: "Unit 5: Personal Care and Appearance",
+            open: false,
+            lessons: [
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 1: Ask for something in a store",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 2: Make an appointment at a salon or spa",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 3: Discuss ways to improve appearance",
+                open: false,
+                sections: createStandardSections(),
+              },
+              {
+                id: `lesson-${crypto.randomUUID()}`,
+                title: "Lesson 4: Define the meaning of beauty",
+                open: false,
+                sections: createStandardSections(),
+              },
+            ],
+          },
+        ];
+      }
+
+      function loadAppData() {
+        try {
+          const savedData = localStorage.getItem(LOCAL_STORAGE_KEY_STRUCTURE);
+          if (savedData) {
+            appData = JSON.parse(savedData);
+            console.log("App structure loaded from localStorage.");
+            if (!Array.isArray(appData) || appData.length === 0) {
+              // Handle corrupted or empty data
+              console.warn("Loaded app data is invalid. Resetting to default.");
+              appData = getDefaultData();
+              saveAppData();
+            }
+          } else {
+            console.log("No local app structure found. Loading default data.");
+            appData = getDefaultData();
+            saveAppData();
+          }
+        } catch (error) {
+          console.error("Error loading app structure:", error);
+          appData = getDefaultData();
+        }
+      }
+
+      function saveAppData() {
+        try {
+          localStorage.setItem(
+            LOCAL_STORAGE_KEY_STRUCTURE,
+            JSON.stringify(appData)
+          );
+          console.log("App structure saved.");
+        } catch (error) {
+          console.error("Error saving app structure:", error);
+        }
+      }
+
+      function loadProgressFromLocal() {
+        try {
+          const savedData = localStorage.getItem(LOCAL_STORAGE_KEY_PROGRESS);
+          if (savedData) {
+            progressData = JSON.parse(savedData);
+            console.log(
+              "Progress data loaded from localStorage:",
+              progressData
+            );
+          } else {
+            console.log("No local progress data found.");
+            progressData = {};
+          }
+        } catch (error) {
+          console.error("Error loading from localStorage:", error);
+          progressData = {};
+        }
+        // REMOVED: updateUIFromProgress() - This is called after renderApp() now
+      }
+
+      function saveProgressToLocal() {
+        try {
+          localStorage.setItem(
+            LOCAL_STORAGE_KEY_PROGRESS,
+            JSON.stringify(progressData)
+          );
+          console.log(`Saved progress to localStorage.`);
+        } catch (error) {
+          console.error("Error saving progress to localStorage:", error);
+        }
+      }
+
+      // --- App Rending (NEW) ---
+      function renderApp() {
+        const unitsContainer = document.getElementById("units-container");
+        if (!unitsContainer) return;
+
+        let html = "";
+
+        appData.forEach((unit) => {
+          html += `
+                <details class="unit-accordion bg-white shadow-lg rounded-xl mb-6" data-unit-id="${
+                  unit.id
+                }" ${unit.open ? "open" : ""}>
+                    <summary class="unit-summary">
+                        <span class="flex-1">${unit.title}</span>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-inner"></div>
+                        </div>
+                        <!-- REMOVED: Delete Unit Button -->
+                    </summary>
+                    <div class="p-4">
+                        ${unit.lessons
+                          .map(
+                            (lesson) => `
+                            <details class="lesson-accordion rounded-xl overflow-hidden mt-4" data-lesson-id="${
+                              lesson.id
+                            }" ${lesson.open ? "open" : ""}>
+                                <summary class="lesson-summary">
+                                    <span class="flex-1">${lesson.title}</span>
+                                    <div class="completion-badge hidden">Complete!</div>
+                                    <div class="progress-bar-container">
+                                        <div class="progress-bar-inner"></div>
+                                    </div>
+                                    <!-- REMOVED: Delete Lesson Button -->
+                                </summary>
+                                <div class="checklist-grid checklist-container">
+                                    ${Object.entries(lesson.sections)
+                                      .map(
+                                        ([key, section]) => `
+                                        <div class="section-card">
+                                            <h3>
+                                                <span>${section.title}</span>
+                                                <div class="progress-bar-container"><div class="progress-bar-inner"></div></div>
+                                            </h3>
+                                            <ul class="${key}-list">
+                                                ${section.items
+                                                  .map(
+                                                    (item) => `
+                                                    <li class="${STYLES.listItem}" data-item-id="${item.id}">
+                                                        <input type="checkbox" id="${item.id}" class="${STYLES.checkbox}">
+                                                        <label for="${item.id}" class="cursor-pointer flex-1 editable-label" contenteditable="true" data-item-id="${item.id}">${item.label}</label>
+                                                        <button class="delete-btn delete-item-btn" data-item-id="${item.id}" title="Delete Item">❌</button>
+                                                    </li>
+                                                `
+                                                  )
+                                                  .join("")}
+                                            </ul>
+                                            <button class="add-btn add-item-btn" data-section-key="${key}" data-lesson-id="${
+                                          lesson.id
+                                        }">+ Add Item</button>
+                                        </div>
+                                    `
+                                      )
+                                      .join("")}
+                                </div>
+                            </details>
+                        `
+                          )
+                          .join("")}
+                        <!-- REMOVED: Add New Lesson Button -->
+                    </div>
+                </details>
+                `;
+        });
+
+        unitsContainer.innerHTML = html;
+      }
+
+      // --- Event Handling (REFACTORED) ---
+
+      function attachGlobalListener() {
+        const mainContent = document.getElementById("main-content");
+
+        mainContent.addEventListener("click", (e) => {
+          // REMOVED: Add Unit
+          // REMOVED: Add Lesson
+
+          // Add Item
+          if (e.target.classList.contains("add-item-btn")) {
+            const lessonId = e.target.dataset.lessonId;
+            const sectionKey = e.target.dataset.sectionKey;
+            addItem(lessonId, sectionKey);
+          }
+
+          // REMOVED: Delete Unit
+          // REMOVED: Delete Lesson
+
+          // Delete Item
+          if (e.target.classList.contains("delete-item-btn")) {
+            const itemId = e.target.dataset.itemId;
+            deleteItem(itemId);
+          }
+        });
+
+        mainContent.addEventListener("change", (e) => {
+          // Checkbox change
+          if (e.target.type === "checkbox") {
+            handleCheckboxChange(e.target);
+          }
+        });
+
+        // Handle label editing (contenteditable)
+        mainContent.addEventListener(
+          "blur",
+          (e) => {
+            if (e.target.classList.contains("editable-label")) {
+              const itemId = e.target.dataset.itemId;
+              const newLabel = e.target.textContent.trim();
+              updateItemLabel(itemId, newLabel);
+            }
+          },
+          true
+        );
+
+        // Prevent Enter key from creating new line in contenteditable
+        mainContent.addEventListener("keydown", (e) => {
+          if (
+            e.target.classList.contains("editable-label") &&
+            e.key === "Enter"
+          ) {
+            e.preventDefault();
+            e.target.blur(); // Trigger save
+          }
+        });
+
+        // Save open/close state of accordions
+        mainContent.addEventListener(
+          "toggle",
+          (e) => {
+            if (e.target.tagName === "DETAILS") {
+              const unitId = e.target.dataset.unitId;
+              const lessonId = e.target.dataset.lessonId;
+
+              try {
+                if (unitId) {
+                  findUnit(unitId).open = e.target.open;
+                } else if (lessonId) {
+                  findLesson(lessonId).lesson.open = e.target.open;
+                }
+                saveAppData(); // Save the open/close state
+              } catch (error) {
+                console.error("Error saving toggle state:", error);
+              }
+            }
+          },
+          true
+        ); // Use capture phase to catch event
+      }
+
+      // REMOVED: attachCheckboxListeners()
+
+      function handleCheckboxChange(checkbox) {
+        // ... (This function remains largely the same) ...
+        const id = checkbox.id;
+        const isChecked = checkbox.checked;
+        progressData[id] = isChecked;
+        const listItem = checkbox.closest("li");
+        if (listItem) {
+          const classes = STYLES.listItemChecked.split(" ");
+          if (isChecked) {
+            listItem.classList.add(...classes);
+          } else {
+            listItem.classList.remove(...classes);
+          }
+        }
+        saveProgressToLocal();
+        const lessonElement = checkbox.closest(".lesson-accordion");
+        if (lessonElement) {
+          updateLessonProgress(lessonElement);
+        }
+      }
+
+      // --- CRUD Functions (NEW) ---
+
+      // Find Helpers
+      function findUnit(unitId) {
+        return appData.find((u) => u.id === unitId);
+      }
+      function findLesson(lessonId) {
+        for (const unit of appData) {
+          const lesson = unit.lessons.find((l) => l.id === lessonId);
+          if (lesson) return { unit, lesson };
+        }
+        return null;
+      }
+      function findItem(itemId) {
+        for (const unit of appData) {
+          for (const lesson of unit.lessons) {
+            for (const sectionKey in lesson.sections) {
+              const section = lesson.sections[sectionKey];
+              const item = section.items.find((i) => i.id === itemId);
+              if (item) return { unit, lesson, section, item };
+            }
+          }
+        }
+        return null;
+      }
+
+      // Rerender helper
+      function saveAndRerender() {
+        saveAppData();
+        renderApp();
+        updateUIFromProgress(); // Update checks and progress bars
+      }
+
+      // Create
+      // REMOVED: addUnit()
+      // REMOVED: addLesson()
+
+      // FIXED: addItem function
+      function addItem(lessonId, sectionKey) {
+        const findResult = findLesson(lessonId); // Get the result object
+        if (!findResult) {
+          // Check if the result is null
+          console.error("Could not find lesson for adding item:", lessonId);
+          return;
+        }
+
+        const { lesson } = findResult; // Now it's safe to destructure
+
+        if (!lesson || !lesson.sections[sectionKey]) {
+          console.error("Could not find section to add item:", sectionKey);
+          return;
+        }
+
+        const newItemId = `item-${crypto.randomUUID()}`;
+        lesson.sections[sectionKey].items.push({
+          id: newItemId,
+          label: "", // Empty label - user will type directly
+        });
+        saveAndRerender();
+
+        // Focus on the new empty item after a short delay
+        setTimeout(() => {
+          const newLabel = document.querySelector(
+            `[data-item-id="${newItemId}"].editable-label`
+          );
+          if (newLabel) {
+            newLabel.focus();
+            // Place cursor at the end
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(newLabel);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        }, 100);
+      }
+
+      // Delete
+      // REMOVED: deleteUnit()
+      // REMOVED: deleteLesson()
+
+      function deleteItem(itemId) {
+        // No confirm for single item, it's low risk
+        const findResult = findItem(itemId);
+        if (!findResult) {
+          console.error("Could not find item to delete:", itemId);
+          return;
+        }
+
+        const { section } = findResult;
+
+        section.items = section.items.filter((i) => i.id !== itemId);
+        delete progressData[itemId]; // Clean up progress
+
+        saveProgressToLocal();
+        saveAndRerender();
+      }
+
+      // Update Item Label
+      function updateItemLabel(itemId, newLabel) {
+        const findResult = findItem(itemId);
+        if (!findResult) {
+          console.error("Could not find item to update:", itemId);
+          return;
+        }
+
+        const { item } = findResult;
+
+        // If label is empty, delete the item
+        if (!newLabel || newLabel === "") {
+          deleteItem(itemId);
+          return;
+        }
+
+        item.label = newLabel;
+        saveAppData(); // Just save, no need to rerender
+        console.log(`Updated item ${itemId} label to: ${newLabel}`);
+      }
+
+      // --- UI Update Functions ---
+
+      function updateUIFromProgress() {
+        // ... (This function remains largely the same) ...
+        const allCheckboxes = document.querySelectorAll(
+          'input[type="checkbox"]'
+        );
+        allCheckboxes.forEach((checkbox) => {
+          const id = checkbox.id;
+          const isChecked = progressData[id] || false;
+
+          if (checkbox.checked !== isChecked) {
+            checkbox.checked = isChecked;
+          }
+
+          // Update parent list item style
+          const listItem = checkbox.closest("li");
+          if (listItem) {
+            // FIX: Use add/remove with spread operator for multiple classes
+            const classes = STYLES.listItemChecked.split(" ");
+            if (isChecked) {
+              listItem.classList.add(...classes);
+            } else {
+              listItem.classList.remove(...classes);
+            }
+          }
+        });
+
+        // Update all progress bars
+        const allLessons = document.querySelectorAll(".lesson-accordion");
+        allLessons.forEach(updateLessonProgress);
+      }
+
+      function updateLessonProgress(lessonElement) {
+        // ... (This function remains largely the same) ...
+        const sections = lessonElement.querySelectorAll(".section-card");
+        let totalTasksInLesson = 0;
+        let completedTasksInLesson = 0;
+
+        // Update each section (Vocab, Grammar, etc.)
+        sections.forEach((section) => {
+          const tasks = section.querySelectorAll('input[type="checkbox"]');
+          const total = tasks.length;
+          const completed = Array.from(tasks).filter((t) => t.checked).length;
+
+          totalTasksInLesson += total;
+          completedTasksInLesson += completed;
+
+          const percent = total === 0 ? 0 : (completed / total) * 100;
+          const progressBar = section.querySelector(".progress-bar-inner");
+          if (progressBar) {
+            // ADDED: Check old width before triggering confetti
+            const oldWidthPercent = parseFloat(progressBar.style.width) || 0;
+            if (percent === 100 && oldWidthPercent < 100) {
+              triggerConfetti({ particleCount: 100, spread: 70 }); // Section complete!
+            }
+            progressBar.style.width = `${percent}%`;
+          }
+        });
+
+        // Update the main lesson progress
+        const lessonPercent =
+          totalTasksInLesson === 0
+            ? 0
+            : (completedTasksInLesson / totalTasksInLesson) * 100;
+        const lessonProgressBar = lessonElement.querySelector(
+          "summary .progress-bar-inner"
+        );
+        if (lessonProgressBar) {
+          // ADDED: Check old width before triggering confetti
+          const oldWidthPercent =
+            parseFloat(lessonProgressBar.style.width) || 0;
+          if (lessonPercent === 100 && oldWidthPercent < 100) {
+            // Lesson complete! Bigger celebration
+            triggerConfetti({
+              particleCount: 200,
+              spread: 120,
+              scalar: 1.2,
+            });
+          }
+          lessonProgressBar.style.width = `${lessonPercent}%`;
+        }
+
+        // Show completion badge
+        const badge = lessonElement.querySelector("summary .completion-badge");
+        if (badge) {
+          badge.classList.toggle("hidden", lessonPercent < 100);
+        }
+
+        // Also update the parent unit
+        const unitElement = lessonElement.closest(".unit-accordion");
+        if (unitElement) {
+          updateUnitProgress(unitElement);
+        }
+      }
+
+      function updateUnitProgress(unitElement) {
+        // ... (This function remains largely the same) ...
+        const lessons = unitElement.querySelectorAll(".lesson-accordion");
+        let totalTasksInUnit = 0;
+        let completedTasksInUnit = 0;
+
+        lessons.forEach((lesson) => {
+          const tasks = lesson.querySelectorAll('input[type="checkbox"]');
+          totalTasksInUnit += tasks.length;
+          completedTasksInUnit += Array.from(tasks).filter(
+            (t) => t.checked
+          ).length;
+        });
+
+        const unitPercent =
+          totalTasksInUnit === 0
+            ? 0
+            : (completedTasksInUnit / totalTasksInUnit) * 100;
+        const unitProgressBar = unitElement.querySelector(
+          "summary .progress-bar-inner"
+        );
+        if (unitProgressBar) {
+          // ADDED: Check old width before triggering confetti
+          const oldWidthPercent = parseFloat(unitProgressBar.style.width) || 0;
+          if (unitPercent === 100 && oldWidthPercent < 100) {
+            // Unit complete! Grand celebration
+            triggerConfetti({
+              particleCount: 300,
+              spread: 180,
+              scalar: 1.5,
+              ticks: 200,
+            });
+          }
+          unitProgressBar.style.width = `${unitPercent}%`;
+        }
+      }
+
+      // --- Utility to create checklist items ---
+      // REMOVED: createChecklistItem (this logic is now in renderApp)
+
+      // --- Dynamic Content Generation ---
+      // REMOVED: populateChecklist (this logic is now in getDefaultData and renderApp)
+      // REMOVED: window.addEventListener('load', ...)
+    </script>
+
+    <style>
+      /* Base styles */
+      body {
+        font-family: "Comic Neue", "Comic Sans MS", cursive, sans-serif;
+        background-color: #f0fff4; /* A very light green */
+      }
+
+      /* Custom progress bar */
+      .progress-bar-container {
+        width: 100px;
+        height: 12px;
+        background-color: #e0e0e0;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid #c0c0c0;
+      }
+
+      .progress-bar-inner {
+        height: 100%;
+        width: 0%; /* Updated by JS */
+        background: linear-gradient(
+          to right,
+          #fbbf24,
+          #f59e0b
+        ); /* Yellow/Orange */
+        transition: width 0.4s ease-in-out;
+      }
+
+      /* Style for completed progress bar */
+      .progress-bar-inner[style*="width: 100%"] {
+        background: linear-gradient(to right, #4ade80, #22c55e); /* Green */
+      }
+
+      /* Custom accordion styles */
+      details > summary {
+        list-style: none; /* Remove default triangle */
+        cursor: pointer;
+      }
+
+      details > summary::-webkit-details-marker {
+        display: none; /* Chrome */
+      }
+
+      /* Custom marker */
+      details > summary::before {
+        content: "►";
+        margin-right: 10px;
+        font-size: 0.8em;
+        transition: transform 0.2s;
+      }
+
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+
+      /* Smooth animation for details opening/closing */
+      details {
+        overflow: hidden;
+      }
+
+      details > div {
+        animation: slideDown 0.3s ease-out;
+        transform-origin: top;
+      }
+
+      details[open] > div {
+        animation: slideDown 0.3s ease-out;
+      }
+
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Smooth grid animation */
+      .checklist-grid {
+        animation: fadeIn 0.4s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      /* Card styles */
+      .section-card {
+        background: #ffffff;
+        border: 2px solid #a7f3d0; /* Light green border */
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0, 80, 0, 0.05);
+        padding: 16px;
+        transition: all 0.2s;
+      }
+
+      .section-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0, 80, 0, 0.1);
+      }
+
+      .checklist-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        padding: 16px;
+        background: #f0fdf4; /* Very light green */
+        border-radius: 0 0 12px 12px;
+      }
+
+      /* Header for sections */
+      .section-card h3 {
+        font-weight: 700;
+        font-size: 1.25rem;
+        color: #047857; /* Dark Green */
+        border-bottom: 2px solid #d1fae5;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .section-card ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      /* Main Unit/Lesson Summary styles */
+      .unit-summary,
+      .lesson-summary {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        font-size: 1.25rem;
+        font-weight: 700;
+        border-radius: 12px;
+        transition: all 0.2s;
+      }
+
+      .unit-summary {
+        background: #10b981; /* Bright Green */
+        color: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .unit-summary:hover {
+        background: #059669;
+      }
+
+      .lesson-summary {
+        background: #d1fae5; /* Light Green */
+        color: #065f46; /* Dark Green */
+        margin-top: 8px;
+        border: 1px solid #a7f3d0;
+      }
+
+      .lesson-summary:hover {
+        background: #a7f3d0;
+      }
+
+      .completion-badge {
+        background-color: #f59e0b; /* Orange */
+        color: #78350f; /* Dark Orange */
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        margin-left: 12px;
+        animation: bounce-in 0.5s;
+      }
+
+      @keyframes bounce-in {
+        0% {
+          transform: scale(0.5);
+          opacity: 0;
+        }
+        80% {
+          transform: scale(1.1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      /* Loading state */
+      #loading-state {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #065f46;
+      }
+
+      /* ADDED: Styles for new Add/Delete buttons */
+      .delete-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        opacity: 0.5;
+        transition: all 0.2s;
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+      .delete-btn:hover {
+        opacity: 1;
+        background-color: #fecaca; /* Light red */
+        color: #b91c1c; /* Dark red */
+      }
+
+      .add-btn {
+        background-color: #d1fae5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 12px;
+        transition: all 0.2s;
+      }
+      .add-btn:hover {
+        background-color: #a7f3d0;
+        border-color: #6ee7b7;
+      }
+
+      /* Specific tweaks */
+      /* REMOVED: .lesson-summary .delete-btn (button is gone) */
+      /* REMOVED: .unit-summary .delete-btn (button is gone) */
+
+      li .delete-btn {
+        font-size: 0.8rem;
+      }
+
+      /* Editable label styles */
+      .editable-label {
+        outline: none;
+        padding: 2px 4px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+      }
+
+      .editable-label:focus {
+        background-color: #fef9c3; /* Light yellow when editing */
+        box-shadow: 0 0 0 2px #fbbf24;
+      }
+
+      .editable-label:empty:before {
+        content: "Type your text here...";
+        color: #9ca3af;
+        font-style: italic;
+      }
+
+      /* Name Modal Styles */
+      #name-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        backdrop-filter: blur(4px);
+      }
+
+      #name-modal.hidden {
+        display: none;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 450px;
+        width: 90%;
+        animation: modalFadeIn 0.3s ease-out;
+      }
+
+      @keyframes modalFadeIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9) translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      .modal-content h2 {
+        color: #065f46;
+        font-size: 2rem;
+        margin-bottom: 10px;
+        text-align: center;
+      }
+
+      .modal-content p {
+        color: #6b7280;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .modal-content input {
+        width: 100%;
+        padding: 15px;
+        font-size: 1.1rem;
+        border: 2px solid #d1fae5;
+        border-radius: 12px;
+        outline: none;
+        transition: all 0.3s;
+        font-family: "Comic Neue", "Comic Sans MS", cursive, sans-serif;
+      }
+
+      .modal-content input:focus {
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+      }
+
+      .modal-content button {
+        width: 100%;
+        margin-top: 20px;
+        padding: 15px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-family: "Comic Neue", "Comic Sans MS", cursive, sans-serif;
+      }
+
+      .modal-content button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+      }
+
+      .modal-content button:active {
+        transform: translateY(0);
+      }
+    </style>
+  </head>
+  <body class="bg-green-50 text-gray-800 p-4 md:p-8">
+    <!-- Name Modal -->
+    <div id="name-modal" class="hidden">
+      <div class="modal-content">
+        <h2>👋 Welcome!</h2>
+        <p>Let's get started on your English learning journey!</p>
+        <input
+          type="text"
+          id="name-input"
+          placeholder="Enter your name..."
+          autocomplete="off"
+        />
+        <button id="save-name-btn">Start My Quest! 🚀</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" class="max-w-6xl mx-auto hidden">
+      <header class="text-center mb-8">
+        <h2 id="welcome-message" class="text-3xl font-bold text-green-600 mb-4">
+          Welcome!
+        </h2>
+        <h1
+          class="text-5xl font-bold text-green-700"
+          style="text-shadow: 2px 2px #a7f3d0"
+        >
+          Top Notch Quest Log
+        </h1>
+        <p class="text-xl text-green-600 mt-2">Your Adventure in English!</p>
+      </header>
+
+      <!-- REMOVED: Add Unit Button -->
+
+      <!-- REMOVED: Static HTML for Units -->
+      <!-- Unit 1 -->
+      <!-- ... -->
+      <!-- End Unit 1 -->
+      <!-- Unit 2 -->
+      <!-- ... -->
+      <!-- End Unit 2 -->
+
+      <!-- ADDED: Dynamic Container for Units -->
+      <div id="units-container">
+        <!-- Units will be rendered here by JavaScript -->
+      </div>
+    </div>
+
+    <footer class="text-center mt-8 text-xs text-gray-500">
+      <p>Your progress is saved automatically.</p>
+      <!-- REMOVED: User ID display -->
+      <!-- <p class="mt-2">User ID: <span id="user-id-display" class="font-bold text-gray-600">loading...</span></p> -->
+    </footer>
+  </body>
+</html>
